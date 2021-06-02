@@ -1,0 +1,136 @@
+---
+title: "PMLProject"
+author: "NJL"
+date: "31/05/2021"
+output: html_document
+---
+## Inroduction
+The goal of this project is to predict the outcome based om the training set. This is the "classe" variable in the training set. Any of the other variables can be used to predict with. Create a report describing how the model is built, how  cross validation was used, what is the expected out of sample error, and whywere the choices made. The chosen model will be used to predict 20 different test cases.
+
+## Overview
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(caret)
+library(kernlab)
+library(corrplot)
+set.seed(1234)
+```
+
+### Loading data
+The training data is stored in the dataframe Trdat and the testing data in Tstdat
+```{r load, echo=FALSE}
+Trdat <- read.csv("pml-training.csv")
+Tstdat <- read.csv("pml-testing.csv")
+```
+
+### Analyse and preProcess training data
+
+There are 160 variables and 19622 samples in the training data set and 20 samples in the testing data set.
+
+The first study is to decrease the number of variables, derived statistical variables, variables with large numbers of NA are removed.
+
+Descriptive and time variables are analysed and found to be not required for this prediction exercise.
+
+
+```{r analyse, echo=FALSE}
+x2 <- grep("^avg|^tot|^std|^var", names(Trdat))
+x3 <- grep("^kur|^skew|^min|^max", names(Trdat))
+x4 <- grep("^amp", names(Trdat)) # Too many NA's
+dat1 <- Trdat[, -c(1:7, x2, x3, x4)]
+dat2 <- Tstdat[, -c(1:7, x2, x3, x4)]
+```
+
+# Partitioning of Training Data
+
+The training data is partitioned in the ratio of 70:30, 70 for training and 30 for out of sample error testing.
+
+```{r parting, echo=FALSE}
+inTrain <- createDataPartition(y=dat1$classe, p=0.7, list=F)
+train <- dat1[inTrain,]
+sub_tst <- dat1[-inTrain,]
+```
+
+### First trial - fitting a model using Decision Tree algorithm
+
+The method used is Cross Validation with 3 K-folds. Using confusion matrix to check for accuracy, thereby the out of sample error. 
+
+```{r Trees, echo=FALSE}
+control <- trainControl(method="cv", number=3, verboseIter=F)
+mod_trees <- train(classe~., data=train, method="rpart", trControl = control, tuneLength = 5)
+pred_trees <- predict(mod_trees, sub_tst)
+cMtrees <- confusionMatrix(pred_trees, factor(sub_tst$classe))
+cMtrees
+```
+
+### Second trial - fitting a model using RandomForest algorithm
+
+```{r RF, echo=FALSE}
+mod_rf <- train(classe~., data=train, method="rf", trControl = control, tuneLength = 5)
+pred_rf <- predict(mod_rf, sub_tst)
+
+cMrf <- confusionMatrix(pred_rf, factor(sub_tst$classe))
+cMrf
+```
+
+### Third trial - fitting a model using Gradient Boosted Trees algorithm
+
+```{r GBM, echo=FALSE}
+mod_gbm <- train(classe~., data=train, method="gbm", trControl = control, tuneLength = 5, verbose = F)
+pred_gbm <- predict(mod_gbm, sub_tst)
+cMgbm <- confusionMatrix(pred_gbm, factor(sub_tst$classe))
+cMgbm
+```
+
+## Choice of model to predict the test data
+
+From the Confusion Matrix output, the accuracy of the RandomForest is the best, the prediction is done using the RF model "mod_rf"
+
+```{r Pred, echo=FALSE}
+pred <- predict(mod_rf, dat2)
+print(pred)
+```
+
+## Appendix
+
+### Plots of models
+
+Decision Trees
+
+```{r pltDT, echo=FALSE}
+plot(mod_trees)
+```
+
+RandomForest
+
+```{r pltRF, echo=FALSE}
+plot(mod_rf)
+```
+
+Gradient Boosted Trees
+
+```{r pltGBM, echo=FALSE}
+plot(mod_gbm)
+```
+
+### Further analysis by applying Technical knowledge on the data
+
+The processed data set contains raw sensor data and derived data.
+
+The raw data variables have names ending with "_x", "_y", "_z".
+
+The derived data are the Roll, Pitch and Yaw variables.
+
+Since the derived data are less in number, we can use only the derived data to fit the model and use it for prediction.
+
+```{r LessData}
+x1 <- grep("_x$|_y$|_z$", names(train))
+train <- train[, -x1]
+dim(train)
+mod_rf <- train(classe~., data=train, method="rf", trControl = control, tuneLength = 5)
+pred <- predict(mod_rf, dat2)
+print(pred)
+```
+
+The predictions are the same though the number of variables is reduced.
